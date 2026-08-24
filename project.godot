@@ -1,0 +1,20 @@
+; Engine configuration file.
+; Godot 3.5 project — 3D adult game prototype (technical showcase)
+config_version=4
+
+[application]
+
+config/name="AdultGame3D"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("3.5")
+
+[display]
+
+window/size/width=1280
+window/size/height=720
+window/stretch/mode="2d"
+window/stretch/aspect="keep"
+
+[rendering]
+
+quality/driver/driver_name="GLES3"

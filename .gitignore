@@ -1,0 +1,6 @@
+# 排除备份和遗留文件
+.backup/
+lib/
+js/
+ui/
+*.json

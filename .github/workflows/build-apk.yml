@@ -1,0 +1,49 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Godot 3.5.2 (x86_64)
+        run: |
+          curl -L -o godot.zip https://downloads.tuxfamily.org/godotengine/3.5.2/Godot_v3.5.2-stable_linux.x86_64.zip
+          unzip -o godot.zip
+          chmod +x Godot_v3.5.2-stable_linux.x86_64
+          sudo mv Godot_v3.5.2-stable_linux.x86_64 /usr/local/bin/godot
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Godot Android export templates
+        run: |
+          mkdir -p ~/.local/share/godot/templates/3.5.2.stable
+          curl -L -o templates.tpz https://downloads.tuxfamily.org/godotengine/3.5.2/Godot_v3.5.2-stable_export_templates.tpz
+          unzip -o templates.tpz -d ~/.local/share/godot/templates/3.5.2.stable
+          ls -la ~/.local/share/godot/templates/3.5.2.stable
+
+      - name: Validate project (headless parse)
+        run: godot --headless --quit --path . 2>&1 | tail -20
+
+      - name: Export release APK
+        run: |
+          mkdir -p build
+          godot --headless --export-release Android build/AdultGame3D.apk 2>&1 | tail -30
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: adultgame3d-apk
+          path: build/AdultGame3D.apk
