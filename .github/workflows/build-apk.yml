@@ -11,12 +11,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Godot 3.5.2 (x86_64)
+      - name: Download Godot 3.5.2 headless
         run: |
-          curl -L -o godot.zip https://downloads.tuxfamily.org/godotengine/3.5.2/Godot_v3.5.2-stable_linux.x86_64.zip
+          curl --fail --location --retry 4 --retry-delay 3 \
+            --output godot.zip \
+            https://github.com/godotengine/godot/releases/download/3.5.2-stable/Godot_v3.5.2-stable_linux_headless.64.zip
           unzip -o godot.zip
-          chmod +x Godot_v3.5.2-stable_linux.x86_64
-          sudo mv Godot_v3.5.2-stable_linux.x86_64 /usr/local/bin/godot
+          chmod +x Godot_v3.5.2-stable_linux_headless.64
+          sudo mv Godot_v3.5.2-stable_linux_headless.64 /usr/local/bin/godot
+          godot --version || true
 
       - name: Setup Java 17
         uses: actions/setup-java@v3
@@ -27,20 +30,53 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Configure Android SDK and debug signing for Godot 3.5
+        run: |
+          sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+          mkdir -p ~/.android ~/.config/godot
+          keytool -genkeypair -v \
+            -keystore ~/.android/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+          cat > ~/.config/godot/editor_settings-3.tres <<EOF
+          [gd_resource type="EditorSettings" format=2]
+
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
+          export/android/debug_keystore = "/home/runner/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+          cat ~/.config/godot/editor_settings-3.tres
+
       - name: Install Godot Android export templates
         run: |
-          mkdir -p ~/.local/share/godot/templates/3.5.2.stable
-          curl -L -o templates.tpz https://downloads.tuxfamily.org/godotengine/3.5.2/Godot_v3.5.2-stable_export_templates.tpz
-          unzip -o templates.tpz -d ~/.local/share/godot/templates/3.5.2.stable
+          curl --fail --location --retry 4 --retry-delay 3 \
+            --output templates.tpz \
+            https://github.com/godotengine/godot/releases/download/3.5.2-stable/Godot_v3.5.2-stable_export_templates.tpz
+          rm -rf /tmp/godot-templates
+          mkdir -p /tmp/godot-templates ~/.local/share/godot/templates/3.5.2.stable
+          unzip -o templates.tpz -d /tmp/godot-templates
+          cp -a /tmp/godot-templates/templates/. ~/.local/share/godot/templates/3.5.2.stable/
+          test -f ~/.local/share/godot/templates/3.5.2.stable/android_debug.apk
           ls -la ~/.local/share/godot/templates/3.5.2.stable
 
       - name: Validate project (headless parse)
-        run: godot --headless --quit --path . 2>&1 | tail -20
+        run: |
+          godot --path . --quit 2>&1 | tee godot-validation.log || true
+          if grep -q "SCRIPT ERROR" godot-validation.log; then
+            echo "GDScript validation failed"
+            exit 1
+          fi
 
-      - name: Export release APK
+      - name: Export debug APK
         run: |
           mkdir -p build
-          godot --headless --export-release Android build/AdultGame3D.apk 2>&1 | tail -30
+          godot --path . --export-debug Android build/AdultGame3D.apk 2>&1 | tee godot-export.log || true
+          test -s build/AdultGame3D.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
